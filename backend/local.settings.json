@@ -1,0 +1,37 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AZURE_STORAGE_CONNECTION_STRING": "",
+    "AZURE_STORAGE_ACCOUNT_NAME": "",
+    "AZURE_STORAGE_ACCOUNT_KEY": "",
+    "COSMOS_DB_CONNECTION_STRING": "",
+    "COSMOS_DB_NAME": "supertrack-system",
+    "NEO4J_URI": "neo4j://localhost:7687",
+    "NEO4J_USER": "neo4j",
+    "NEO4J_PASSWORD": "",
+    "STARROCKS_HOST": "localhost",
+    "STARROCKS_PORT": "9030",
+    "STARROCKS_USER": "root",
+    "STARROCKS_PASSWORD": "",
+    "REDIS_HOST": "localhost",
+    "REDIS_PORT": "6379",
+    "REDIS_PASSWORD": "",
+    "AZURE_AD_B2C_TENANT_NAME": "",
+    "AZURE_AD_B2C_CLIENT_ID": "",
+    "AZURE_AD_B2C_CLIENT_SECRET": "",
+    "OPENAI_API_KEY": "",
+    "AZURE_OPENAI_API_KEY": "",
+    "AZURE_OPENAI_ENDPOINT": "",
+    "ENVIRONMENT": "development",
+    "LOG_LEVEL": "INFO",
+    "ENABLE_TELEMETRY": "false",
+    "MAX_BATCH_SIZE": "1000",
+    "CACHE_TTL": "3600"
+  },
+  "Host": {
+    "CORS": "*",
+    "CORSCredentials": true
+  }
+}
