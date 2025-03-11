@@ -54,6 +54,11 @@ from .oauth2_connector import (
     OAuth2FlowType,
     OAuth2TokenType,
 )
+from .meta_connector import (
+    MetaConnector,
+    MetaAPIVersion,
+    MetaProductType,
+)
 
 # Session management
 from .session_manager import (
@@ -102,6 +107,9 @@ __all__ = [
     'OAuth2Connector',
     'OAuth2FlowType', 
     'OAuth2TokenType',
+    'MetaConnector',
+    'MetaAPIVersion',
+    'MetaProductType',
     
     # Session management
     'SessionStorageInterface',
