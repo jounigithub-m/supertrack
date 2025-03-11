@@ -1,524 +1,453 @@
-import { useFetch } from './use-fetch';
 import { useState, useCallback } from 'react';
-import { apiEndpoints } from '@/lib/api';
-import { useToast } from '@/components/ui/use-toast';
+import useFetch from './use-fetch';
+import API_ENDPOINTS from '@/lib/api-config';
+import { handleError } from '@/lib/error-handler';
 
-// Define data source types
-export type DataSourceStatus = 'active' | 'processing' | 'inactive';
-export type DataSourceType = 'SQL Database' | 'JSON API' | 'CSV Files' | 'Log Files' | 'Excel Files' | 'NoSQL Database' | 'Data Warehouse' | 'Streaming';
+// Type definitions
+export type DataSourceStatus = 'connected' | 'disconnected' | 'pending' | 'error';
+export type DataSourceType = 'database' | 'csv' | 'api' | 'warehouse' | 'streaming';
 
 export interface DataSource {
   id: string;
   name: string;
   type: DataSourceType;
-  connectionDetails?: string;
-  size: string;
+  size: number;
+  rowCount?: number;
   lastUpdated: string;
   status: DataSourceStatus;
-  schema?: Record<string, any>;
-  description?: string;
-  createdBy?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  connectionDetails: {
+    host?: string;
+    port?: string;
+    username?: string;
+    database?: string;
+    table?: string;
+    filePath?: string;
+    apiUrl?: string;
+    apiKey?: string;
+    [key: string]: any;
+  };
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
 }
 
 export interface CreateDataSourceInput {
   name: string;
   type: DataSourceType;
-  connectionDetails: string;
-  description?: string;
-  authMethod?: string;
-  authDetails?: Record<string, any>;
+  connectionDetails: {
+    host?: string;
+    port?: string;
+    username?: string;
+    password?: string;
+    database?: string;
+    table?: string;
+    filePath?: string;
+    apiUrl?: string;
+    apiKey?: string;
+    [key: string]: any;
+  };
 }
 
-export interface UpdateDataSourceInput extends Partial<CreateDataSourceInput> {
-  id: string;
-  status?: DataSourceStatus;
+export interface UpdateDataSourceInput {
+  name?: string;
+  connectionDetails?: {
+    host?: string;
+    port?: string;
+    username?: string;
+    password?: string;
+    database?: string;
+    table?: string;
+    filePath?: string;
+    apiUrl?: string;
+    apiKey?: string;
+    [key: string]: any;
+  };
 }
 
-// Mock data for fallback or development
-const mockDataSources: DataSource[] = [
+// Mock data for development and testing
+// This will be used until the API is fully implemented
+const MOCK_DATA_SOURCES: DataSource[] = [
   {
-    id: '1',
+    id: 'ds-001',
     name: 'Customer Database',
-    type: 'SQL Database',
-    size: '2.3 GB',
-    lastUpdated: '2025-03-10',
-    status: 'active',
-    connectionDetails: 'jdbc:postgresql://db.example.com:5432/customers',
-    description: 'Primary customer database containing user profiles and transactions.'
+    type: 'database',
+    size: 2560000000, // 2.56 GB
+    rowCount: 5000000,
+    lastUpdated: '2024-02-28T10:15:30Z',
+    status: 'connected',
+    connectionDetails: {
+      host: 'customer-db.example.com',
+      port: '5432',
+      username: 'readonly_user',
+      database: 'customer_data',
+      table: 'customers'
+    },
+    createdAt: '2023-10-15T08:20:10Z',
+    updatedAt: '2024-02-28T10:15:30Z',
+    createdBy: 'user-001'
   },
   {
-    id: '2',
-    name: 'Product Catalog',
-    type: 'JSON API',
-    size: '450 MB',
-    lastUpdated: '2025-03-08',
-    status: 'active',
-    connectionDetails: 'https://api.example.com/products',
-    description: 'REST API for accessing product information and inventory.'
-  },
-  {
-    id: '3',
+    id: 'ds-002',
     name: 'Sales Transactions',
-    type: 'CSV Files',
-    size: '1.2 GB',
-    lastUpdated: '2025-03-07',
-    status: 'active',
-    connectionDetails: 's3://data.example.com/sales/',
-    description: 'Daily sales transaction records exported from POS systems.'
+    type: 'database',
+    size: 4200000000, // 4.2 GB
+    rowCount: 8500000,
+    lastUpdated: '2024-03-01T14:30:00Z',
+    status: 'connected',
+    connectionDetails: {
+      host: 'sales-db.example.com',
+      port: '3306',
+      username: 'analytics_user',
+      database: 'sales_data',
+      table: 'transactions'
+    },
+    createdAt: '2023-09-20T13:45:25Z',
+    updatedAt: '2024-03-01T14:30:00Z',
+    createdBy: 'user-002'
   },
   {
-    id: '4',
-    name: 'User Activity Logs',
-    type: 'Log Files',
-    size: '3.7 GB',
-    lastUpdated: '2025-03-06',
-    status: 'processing',
-    connectionDetails: 'https://logs.example.com/activity',
-    description: 'Web and mobile application user activity logs.'
+    id: 'ds-003',
+    name: 'Customer Behavior Analytics',
+    type: 'csv',
+    size: 450000000, // 450 MB
+    rowCount: 2000000,
+    lastUpdated: '2024-02-15T09:10:45Z',
+    status: 'connected',
+    connectionDetails: {
+      filePath: 's3://analytics-bucket/customer-behavior/latest.csv'
+    },
+    createdAt: '2023-12-05T16:30:20Z',
+    updatedAt: '2024-02-15T09:10:45Z',
+    createdBy: 'user-001'
   },
   {
-    id: '5',
+    id: 'ds-004',
+    name: 'Customer Feedback Data',
+    type: 'api',
+    size: 125000000, // 125 MB
+    lastUpdated: '2024-02-20T11:20:15Z',
+    status: 'connected',
+    connectionDetails: {
+      apiUrl: 'https://api.feedback.example.com/v1/data',
+      apiKey: '[REDACTED]'
+    },
+    createdAt: '2024-01-10T14:25:30Z',
+    updatedAt: '2024-02-20T11:20:15Z',
+    createdBy: 'user-003'
+  },
+  {
+    id: 'ds-005',
+    name: 'Fraud Detection Data',
+    type: 'streaming',
+    size: 1800000000, // 1.8 GB
+    lastUpdated: '2024-03-02T08:45:10Z',
+    status: 'connected',
+    connectionDetails: {
+      host: 'kafka.example.com',
+      port: '9092',
+      topic: 'transaction-events'
+    },
+    createdAt: '2023-11-22T10:15:45Z',
+    updatedAt: '2024-03-02T08:45:10Z',
+    createdBy: 'user-003'
+  },
+  {
+    id: 'ds-006',
+    name: 'Image Database',
+    type: 'warehouse',
+    size: 5600000000, // 5.6 GB
+    lastUpdated: '2024-02-25T16:30:00Z',
+    status: 'disconnected',
+    connectionDetails: {
+      host: 'data-warehouse.example.com',
+      port: '443',
+      username: 'images_user',
+      database: 'product_images'
+    },
+    createdAt: '2023-10-30T12:40:50Z',
+    updatedAt: '2024-02-25T16:30:00Z',
+    createdBy: 'user-002'
+  },
+  {
+    id: 'ds-007',
     name: 'Inventory Data',
-    type: 'Excel Files',
-    size: '890 MB',
-    lastUpdated: '2025-03-05',
-    status: 'inactive',
-    connectionDetails: 's3://data.example.com/inventory/',
-    description: 'Warehouse inventory reports and reconciliation data.'
+    type: 'database',
+    size: 350000000, // 350 MB
+    rowCount: 1000000,
+    lastUpdated: '2024-02-10T10:05:30Z',
+    status: 'error',
+    connectionDetails: {
+      host: 'inventory-db.example.com',
+      port: '5432',
+      username: 'readonly_user',
+      database: 'inventory',
+      table: 'stock_levels'
+    },
+    createdAt: '2023-12-15T09:25:15Z',
+    updatedAt: '2024-02-10T10:05:30Z',
+    createdBy: 'user-001'
   },
+  {
+    id: 'ds-008',
+    name: 'New Data Source',
+    type: 'csv',
+    size: 0,
+    lastUpdated: '2024-03-01T12:00:00Z',
+    status: 'pending',
+    connectionDetails: {
+      filePath: 'preparing'
+    },
+    createdAt: '2024-03-01T12:00:00Z',
+    updatedAt: '2024-03-01T12:00:00Z',
+    createdBy: 'user-001'
+  }
 ];
 
+// Mock schema for a data source
+const MOCK_SCHEMA = [
+  { name: 'id', type: 'integer' },
+  { name: 'first_name', type: 'string' },
+  { name: 'last_name', type: 'string' },
+  { name: 'email', type: 'string' },
+  { name: 'gender', type: 'string' },
+  { name: 'ip_address', type: 'string' },
+  { name: 'created_at', type: 'timestamp' },
+  { name: 'last_login', type: 'timestamp' },
+  { name: 'account_balance', type: 'decimal(10,2)' },
+  { name: 'is_active', type: 'boolean' },
+  { name: 'preferences', type: 'json' },
+  { name: 'age', type: 'integer' },
+  { name: 'country', type: 'string' },
+  { name: 'signup_source', type: 'string' }
+];
+
+// Feature flag to control whether to use real or mock data
+const USE_MOCK_DATA = !process.env.NEXT_PUBLIC_API_URL;
+
 /**
- * Custom hook for managing data sources
- * 
- * @param options Options to customize the behavior
+ * Hook for managing data sources
  */
-export function useDataSources(options: {
-  /**
-   * Whether to use mock data instead of API calls
-   * @default false in production, true in development
-   */
-  useMockData?: boolean;
-  
-  /**
-   * Whether to fetch data on mount
-   * @default true
-   */
-  fetchOnMount?: boolean;
-} = {}) {
-  const { 
-    useMockData = process.env.NODE_ENV === 'development', 
-    fetchOnMount = true 
-  } = options;
-  
-  const { toast } = useToast();
-  const [selectedDataSourceId, setSelectedDataSourceId] = useState<string | null>(null);
-  
-  // Use the fetch hook for getting all data sources
+export const useDataSources = () => {
+  // State for the selected data source
+  const [selectedDataSource, setSelectedDataSource] = useState<DataSource | null>(null);
+
+  // Use our fetch hook for API requests
   const {
-    data: dataSources,
+    data: dataSources = USE_MOCK_DATA ? MOCK_DATA_SOURCES : [],
     isLoading: isLoadingDataSources,
     error: dataSourcesError,
-    fetchData: fetchDataSources,
-    updateData: updateDataSources,
-  } = useFetch<DataSource[]>('GET', '/data-sources', {
-    initialData: useMockData ? mockDataSources : undefined,
-    fetchOnMount: !useMockData && fetchOnMount,
-  });
-  
-  // Get a single data source by ID
-  const {
-    data: selectedDataSource,
-    isLoading: isLoadingSelectedDataSource,
-    error: selectedDataSourceError,
-    fetchData: fetchSelectedDataSource,
-  } = useFetch<DataSource>('GET', selectedDataSourceId ? `/data-sources/${selectedDataSourceId}` : '', {
-    fetchOnMount: !useMockData && !!selectedDataSourceId,
-  });
-  
-  // Select a data source by ID
-  const selectDataSource = useCallback((id: string) => {
-    setSelectedDataSourceId(id);
-    
-    if (useMockData) {
-      // If using mock data, find the data source in the local array
-      const dataSource = mockDataSources.find(ds => ds.id === id);
-      if (dataSource) {
-        return Promise.resolve(dataSource);
-      }
-      return Promise.reject(new Error('Data source not found'));
+    fetch: fetchDataSourcesFromApi,
+    invalidateCache,
+  } = useFetch<DataSource[]>(
+    'get',
+    API_ENDPOINTS.DATA_SOURCES.LIST.path,
+    undefined,
+    {
+      fetchOnMount: !USE_MOCK_DATA,
+      shouldCache: true,
+      cacheTTL: 60, // 1 minute
     }
-    
-    // Otherwise fetch from API
-    return fetchSelectedDataSource();
-  }, [useMockData, fetchSelectedDataSource]);
-  
+  );
+
+  // Fetch data sources
+  const fetchDataSources = useCallback(async () => {
+    if (USE_MOCK_DATA) {
+      return MOCK_DATA_SOURCES;
+    }
+    return await fetchDataSourcesFromApi();
+  }, [fetchDataSourcesFromApi]);
+
+  // Fetch a specific data source
+  const fetchDataSource = useCallback(async (id: string) => {
+    if (USE_MOCK_DATA) {
+      const dataSource = MOCK_DATA_SOURCES.find(ds => ds.id === id) || null;
+      setSelectedDataSource(dataSource);
+      return dataSource;
+    }
+
+    try {
+      const endpoint = API_ENDPOINTS.DATA_SOURCES.GET(id);
+      const { data: fetchedDataSource } = await fetch(endpoint.path);
+      setSelectedDataSource(fetchedDataSource || null);
+      return fetchedDataSource;
+    } catch (error) {
+      handleError(error, { context: 'fetchDataSource', dataSourceId: id });
+      return null;
+    }
+  }, []);
+
   // Create a new data source
   const createDataSource = useCallback(async (input: CreateDataSourceInput) => {
-    if (useMockData) {
-      // Create a new mock data source
+    if (USE_MOCK_DATA) {
+      // Generate a mock data source from the input
+      const newId = `ds-${Math.floor(Math.random() * 1000)}`;
       const newDataSource: DataSource = {
-        id: `mock-${Date.now()}`,
+        id: newId,
         name: input.name,
         type: input.type,
-        connectionDetails: input.connectionDetails,
-        description: input.description,
-        size: '0 KB', // New data source starts empty
-        lastUpdated: new Date().toISOString().split('T')[0],
-        status: 'processing', // New data sources start in processing
-        createdBy: 'Current User',
+        size: 0,
+        lastUpdated: new Date().toISOString(),
+        status: 'pending',
+        connectionDetails: { ...input.connectionDetails },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        createdBy: 'current-user',
       };
       
-      // Add to mock data
-      const updatedDataSources = [...(dataSources || []), newDataSource];
-      updateDataSources(updatedDataSources);
-      
-      toast({
-        title: 'Data source created',
-        description: `${newDataSource.name} has been created successfully.`,
-      });
-      
-      // Simulate processing completion after 2 seconds
-      setTimeout(() => {
-        const completedDataSources = updatedDataSources.map(ds => {
-          if (ds.id === newDataSource.id) {
-            return { 
-              ...ds, 
-              status: 'active' as DataSourceStatus,
-              size: '10 MB', // Give it some initial size
-              updatedAt: new Date().toISOString() 
-            };
-          }
-          return ds;
-        });
-        
-        updateDataSources(completedDataSources);
-        
-        toast({
-          title: 'Data source ready',
-          description: `${newDataSource.name} is now active and ready to use.`,
-        });
-      }, 2000);
-      
+      // In a real app, we would push this to the server
+      // For mock purposes, we'll just return the new data source
+      invalidateCache(); // Invalidate the data sources cache
       return newDataSource;
     }
-    
-    // Otherwise use the API
+
     try {
-      const result = await apiEndpoints.createDataSource(input);
-      // Refresh the data sources list
-      fetchDataSources();
-      
-      toast({
-        title: 'Data source created',
-        description: `${result.name} has been created successfully.`,
+      const { data } = await fetch(API_ENDPOINTS.DATA_SOURCES.CREATE.path, {
+        method: 'POST',
+        body: JSON.stringify(input),
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
       
-      return result;
-    } catch (error: any) {
-      toast({
-        title: 'Failed to create data source',
-        description: error.message || 'An unexpected error occurred',
-        variant: 'destructive',
-      });
+      // Invalidate the data sources cache to refresh the list
+      invalidateCache();
+      
+      return data;
+    } catch (error) {
+      handleError(error, { context: 'createDataSource', input });
       throw error;
     }
-  }, [useMockData, dataSources, updateDataSources, fetchDataSources, toast]);
-  
+  }, [invalidateCache]);
+
   // Update an existing data source
-  const updateDataSource = useCallback(async (input: UpdateDataSourceInput) => {
-    if (useMockData) {
-      // Update the mock data source
-      const updatedDataSources = (dataSources || []).map(ds => {
-        if (ds.id === input.id) {
-          return { 
-            ...ds, 
-            ...input, 
-            lastUpdated: new Date().toISOString().split('T')[0],
-            updatedAt: new Date().toISOString() 
-          };
-        }
-        return ds;
-      });
-      
-      updateDataSources(updatedDataSources);
-      
-      toast({
-        title: 'Data source updated',
-        description: `The data source has been updated successfully.`,
-      });
-      
-      return updatedDataSources.find(ds => ds.id === input.id);
+  const updateDataSource = useCallback(async (id: string, input: UpdateDataSourceInput) => {
+    if (USE_MOCK_DATA) {
+      // For mock purposes, return a success status
+      invalidateCache(); // Invalidate the data sources cache
+      return { success: true };
     }
-    
-    // Otherwise use the API
+
     try {
-      const result = await apiEndpoints.updateDataSource(input.id, input);
-      // Refresh the data sources list
-      fetchDataSources();
+      const endpoint = API_ENDPOINTS.DATA_SOURCES.UPDATE(id);
+      const { data } = await fetch(endpoint.path, {
+        method: 'PUT',
+        body: JSON.stringify(input),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
       
-      // If this is the selected data source, refresh it too
-      if (selectedDataSourceId === input.id) {
-        fetchSelectedDataSource();
+      // Invalidate the data sources cache to refresh the list
+      invalidateCache();
+      
+      // If this was the selected data source, update it
+      if (selectedDataSource && selectedDataSource.id === id) {
+        fetchDataSource(id);
       }
       
-      toast({
-        title: 'Data source updated',
-        description: `The data source has been updated successfully.`,
-      });
-      
-      return result;
-    } catch (error: any) {
-      toast({
-        title: 'Failed to update data source',
-        description: error.message || 'An unexpected error occurred',
-        variant: 'destructive',
-      });
+      return data;
+    } catch (error) {
+      handleError(error, { context: 'updateDataSource', dataSourceId: id, input });
       throw error;
     }
-  }, [useMockData, dataSources, updateDataSources, fetchDataSources, selectedDataSourceId, fetchSelectedDataSource, toast]);
-  
+  }, [fetchDataSource, invalidateCache, selectedDataSource]);
+
   // Delete a data source
   const deleteDataSource = useCallback(async (id: string) => {
-    if (useMockData) {
-      // Delete from mock data
-      const updatedDataSources = (dataSources || []).filter(ds => ds.id !== id);
-      updateDataSources(updatedDataSources);
-      
-      toast({
-        title: 'Data source deleted',
-        description: 'The data source has been deleted successfully.',
-      });
-      
-      return true;
+    if (USE_MOCK_DATA) {
+      // For mock purposes, return a success status
+      invalidateCache(); // Invalidate the data sources cache
+      return { success: true };
     }
-    
-    // Otherwise use the API
+
     try {
-      await apiEndpoints.deleteDataSource(id);
-      // Refresh the data sources list
-      fetchDataSources();
-      
-      toast({
-        title: 'Data source deleted',
-        description: 'The data source has been deleted successfully.',
+      const endpoint = API_ENDPOINTS.DATA_SOURCES.DELETE(id);
+      const { data } = await fetch(endpoint.path, {
+        method: 'DELETE',
       });
       
-      return true;
-    } catch (error: any) {
-      toast({
-        title: 'Failed to delete data source',
-        description: error.message || 'An unexpected error occurred',
-        variant: 'destructive',
-      });
-      throw error;
-    }
-  }, [useMockData, dataSources, updateDataSources, fetchDataSources, toast]);
-  
-  // Refresh a data source (re-sync with source)
-  const refreshDataSource = useCallback(async (id: string) => {
-    if (useMockData) {
-      // Update the mock data source to simulate refresh
-      const updatedDataSources = (dataSources || []).map(ds => {
-        if (ds.id === id) {
-          return { 
-            ...ds, 
-            status: 'processing' as DataSourceStatus,
-            lastUpdated: new Date().toISOString().split('T')[0],
-            updatedAt: new Date().toISOString() 
-          };
-        }
-        return ds;
-      });
+      // Invalidate the data sources cache to refresh the list
+      invalidateCache();
       
-      updateDataSources(updatedDataSources);
-      
-      toast({
-        title: 'Refreshing data source',
-        description: 'The data source refresh has been initiated.',
-      });
-      
-      // Simulate refresh completion after 1.5 seconds
-      setTimeout(() => {
-        const completedDataSources = updatedDataSources.map(ds => {
-          if (ds.id === id) {
-            // Increase size slightly to simulate new data
-            const currentSize = parseFloat(ds.size.split(' ')[0]);
-            const unit = ds.size.split(' ')[1];
-            const newSize = (currentSize * 1.1).toFixed(1);
-            
-            return { 
-              ...ds, 
-              status: 'active' as DataSourceStatus,
-              size: `${newSize} ${unit}`,
-              updatedAt: new Date().toISOString() 
-            };
-          }
-          return ds;
-        });
-        
-        updateDataSources(completedDataSources);
-        
-        toast({
-          title: 'Data source refreshed',
-          description: 'The data source has been refreshed successfully.',
-        });
-      }, 1500);
-      
-      return true;
-    }
-    
-    // Otherwise use the API
-    try {
-      await apiRequest('POST', `/data-sources/${id}/refresh`);
-      // Refresh the data sources list
-      fetchDataSources();
-      
-      toast({
-        title: 'Refreshing data source',
-        description: 'The data source refresh has been initiated.',
-      });
-      
-      return true;
-    } catch (error: any) {
-      toast({
-        title: 'Failed to refresh data source',
-        description: error.message || 'An unexpected error occurred',
-        variant: 'destructive',
-      });
-      throw error;
-    }
-  }, [useMockData, dataSources, updateDataSources, fetchDataSources, toast]);
-  
-  // Get schema for a data source
-  const getDataSourceSchema = useCallback(async (id: string) => {
-    if (useMockData) {
-      // Return a mock schema
-      const dataSource = mockDataSources.find(ds => ds.id === id);
-      
-      // Generate a mock schema based on the data source type
-      let mockSchema: Record<string, any> = {};
-      
-      switch (dataSource?.type) {
-        case 'SQL Database':
-          mockSchema = {
-            tables: [
-              {
-                name: 'customers',
-                columns: [
-                  { name: 'id', type: 'INTEGER', primaryKey: true },
-                  { name: 'name', type: 'VARCHAR(255)' },
-                  { name: 'email', type: 'VARCHAR(255)' },
-                  { name: 'created_at', type: 'TIMESTAMP' },
-                ]
-              },
-              {
-                name: 'orders',
-                columns: [
-                  { name: 'id', type: 'INTEGER', primaryKey: true },
-                  { name: 'customer_id', type: 'INTEGER', foreignKey: 'customers.id' },
-                  { name: 'amount', type: 'DECIMAL(10,2)' },
-                  { name: 'created_at', type: 'TIMESTAMP' },
-                ]
-              }
-            ]
-          };
-          break;
-          
-        case 'JSON API':
-          mockSchema = {
-            endpoints: [
-              {
-                path: '/products',
-                method: 'GET',
-                parameters: [
-                  { name: 'page', type: 'integer', required: false },
-                  { name: 'limit', type: 'integer', required: false },
-                  { name: 'category', type: 'string', required: false },
-                ],
-                response: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      id: { type: 'integer' },
-                      name: { type: 'string' },
-                      price: { type: 'number' },
-                      category: { type: 'string' },
-                    }
-                  }
-                }
-              }
-            ]
-          };
-          break;
-          
-        case 'CSV Files':
-          mockSchema = {
-            files: [
-              {
-                name: 'sales_2025_03.csv',
-                columns: [
-                  { name: 'transaction_id', type: 'string' },
-                  { name: 'date', type: 'date' },
-                  { name: 'product_id', type: 'string' },
-                  { name: 'quantity', type: 'integer' },
-                  { name: 'price', type: 'decimal' },
-                ]
-              }
-            ]
-          };
-          break;
-          
-        default:
-          mockSchema = {
-            message: 'Schema information not available for this data source type'
-          };
+      // If this was the selected data source, clear it
+      if (selectedDataSource && selectedDataSource.id === id) {
+        setSelectedDataSource(null);
       }
       
-      return mockSchema;
-    }
-    
-    // Otherwise use the API
-    try {
-      const result = await apiRequest('GET', `/data-sources/${id}/schema`);
-      return result;
-    } catch (error: any) {
-      toast({
-        title: 'Failed to fetch schema',
-        description: error.message || 'An unexpected error occurred',
-        variant: 'destructive',
-      });
+      return data;
+    } catch (error) {
+      handleError(error, { context: 'deleteDataSource', dataSourceId: id });
       throw error;
     }
-  }, [useMockData, toast]);
-  
+  }, [invalidateCache, selectedDataSource]);
+
+  // Refresh a data source
+  const refreshDataSource = useCallback(async (id: string) => {
+    if (USE_MOCK_DATA) {
+      // For mock purposes, update the lastUpdated field
+      const dataSourceIndex = MOCK_DATA_SOURCES.findIndex(ds => ds.id === id);
+      if (dataSourceIndex >= 0) {
+        MOCK_DATA_SOURCES[dataSourceIndex] = {
+          ...MOCK_DATA_SOURCES[dataSourceIndex],
+          lastUpdated: new Date().toISOString(),
+          status: 'connected',
+        };
+      }
+      invalidateCache(); // Invalidate the data sources cache
+      return { success: true };
+    }
+
+    try {
+      const endpoint = API_ENDPOINTS.DATA_SOURCES.REFRESH(id);
+      const { data } = await fetch(endpoint.path, {
+        method: 'POST',
+      });
+      
+      // Invalidate the data sources cache to refresh the list
+      invalidateCache();
+      
+      // If this was the selected data source, update it
+      if (selectedDataSource && selectedDataSource.id === id) {
+        fetchDataSource(id);
+      }
+      
+      return data;
+    } catch (error) {
+      handleError(error, { context: 'refreshDataSource', dataSourceId: id });
+      throw error;
+    }
+  }, [fetchDataSource, invalidateCache, selectedDataSource]);
+
+  // Get schema for a data source
+  const getDataSourceSchema = useCallback(async (id: string) => {
+    if (USE_MOCK_DATA) {
+      // Return mock schema
+      return MOCK_SCHEMA;
+    }
+
+    try {
+      const endpoint = API_ENDPOINTS.DATA_SOURCES.SCHEMA(id);
+      const { data } = await fetch(endpoint.path);
+      return data;
+    } catch (error) {
+      handleError(error, { context: 'getDataSourceSchema', dataSourceId: id });
+      throw error;
+    }
+  }, []);
+
   return {
-    // Data
-    dataSources: dataSources || [],
+    dataSources,
     selectedDataSource,
-    
-    // Loading states
     isLoadingDataSources,
-    isLoadingSelectedDataSource,
-    
-    // Errors
     dataSourcesError,
-    selectedDataSourceError,
-    
-    // Actions
     fetchDataSources,
-    selectDataSource,
+    fetchDataSource,
     createDataSource,
     updateDataSource,
     deleteDataSource,
     refreshDataSource,
     getDataSourceSchema,
   };
-}
+};
 
 export default useDataSources;
