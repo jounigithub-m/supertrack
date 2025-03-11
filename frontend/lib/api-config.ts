@@ -16,6 +16,7 @@ const PATHS = {
   DATA_SOURCES: `/api/${API_VERSION}/data-sources`,
   USERS: `/api/${API_VERSION}/users`,
   ANALYTICS: `/api/${API_VERSION}/analytics`,
+  BATCH: `/api/${API_VERSION}/batch`,
 } as const;
 
 // Endpoint configuration interface
@@ -49,6 +50,11 @@ function createEndpoint(
     retry: retry || (requiresAuth ? { maxAttempts: 3, baseDelay: 1000 } : undefined),
   };
 }
+
+// Batch processing endpoint
+export const BATCH = {
+  PROCESS: createEndpoint(`${PATHS.BATCH}`, true, undefined, { maxAttempts: 3, baseDelay: 1000 }),
+};
 
 // Authentication endpoints
 export const AUTH = {
@@ -122,6 +128,7 @@ export const ANALYTICS = {
 
 // All API endpoints grouped by domain
 export const API_ENDPOINTS = {
+  BATCH,
   AUTH,
   MODELS,
   PROJECTS,
