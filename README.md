@@ -1,112 +1,140 @@
 # Supertrack AI Platform
 
-A multitenant SaaS platform that syncs enterprise data into Apache Iceberg tables, StarRocks analytical databases, and Neo4j knowledge graphs to power topic-specific AI agents.
+Supertrack is a comprehensive AI platform designed for managing data sources, creating AI models, and running analytics in a user-friendly environment.
 
-## Features
+## Project Structure
 
-- **AI-Powered Data Management**: Autonomous agents for data syncing and analysis
-- **Multi-Database Architecture**: Leverages Iceberg, StarRocks, and Neo4j
-- **Interactive Q&A**: Chat with AI agents and pin answers to dashboards
-- **API Integration**: Automation workflows through comprehensive API access
-- **Enterprise-Grade Security**: Strict tenant isolation and data privacy
+The project is split into two main directories:
 
-## Tech Stack
+- `frontend/`: Next.js 14 application with TypeScript
+- `backend/`: Python-based Azure Functions for API endpoints
+
+## Technology Stack
 
 ### Frontend
 - Next.js 14 with App Router
 - TypeScript
-- shadcn/ui + Tailwind CSS
-- Chart.js for visualizations
+- Tailwind CSS for styling
+- shadcn/ui component library
+- NextAuth.js for authentication
+- Axios for API requests
+- Chart.js for data visualization
 
 ### Backend
-- Azure Functions (Python)
-- Azure Cosmos DB
-- Azure Data Lake Storage Gen2
-- StarRocks & Neo4j
-- LangChain & LCEL
+- Python 3.10+
+- Azure Functions
+- Azure Cosmos DB for data storage
+- Azure Data Lake Storage Gen2 for file storage
+- StarRocks DB and Neo4j for specialized data processing
+- PyPDF2, pandas, and various AI/ML libraries
 
-## Getting Started
+## Features
+
+- User authentication and role-based access control
+- Data source management
+- AI model creation and training
+- Dashboard for analytics and monitoring
+- Project management
+- Team collaboration tools
+
+## Installation
 
 ### Prerequisites
+- Node.js 18+ and npm
+- Python 3.10+
+- Azure Functions Core Tools
+- Azure CLI (for deployment)
 
-- Node.js 18.x or later
-- Python 3.9 or later
-- Azure subscription
-- Docker for local development
+### Frontend Setup
 
-### Development Setup
+1. Navigate to the frontend directory:
+   ```bash
+   cd frontend
+   ```
 
-1. Clone the repository:
-```bash
-git clone https://github.com/jounigithub-m/supertrack.git
-cd supertrack
-```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-2. Install frontend dependencies:
-```bash
-cd frontend
-npm install
-```
+3. Create a `.env.local` file based on `.env.example` with your configuration.
 
-3. Install backend dependencies:
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
-pip install -r requirements.txt
-```
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
 
-4. Set up environment variables:
-```bash
-cp frontend/.env.example frontend/.env.local
-cp backend/.env.example backend/.env
-```
+### Backend Setup
 
-5. Start development servers:
+1. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
 
-Frontend:
-```bash
-cd frontend
-npm run dev
-```
+2. Create a virtual environment:
+   ```bash
+   python -m venv .venv
+   ```
 
-Backend:
-```bash
-cd backend
-func start
-```
+3. Activate the virtual environment:
+   ```bash
+   # On Windows
+   .venv\Scripts\activate
+   # On macOS/Linux
+   source .venv/bin/activate
+   ```
 
-## Project Structure
+4. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```
-supertrack/
-├── frontend/              # Next.js 14 frontend application
-├── backend/              # Azure Functions backend
-├── infrastructure/       # Infrastructure as code
-├── docs/                # Documentation
-├── scripts/             # Utility scripts
-└── tests/               # End-to-end and integration tests
-```
+5. Create a `local.settings.json` file with your configuration.
 
-## Documentation
+6. Start the Functions runtime:
+   ```bash
+   func start
+   ```
 
-- [Frontend Guidelines](docs/frontend-guidelines.md)
-- [Backend Structure](docs/backend-structure.md)
-- [API Documentation](docs/api-docs.md)
-- [Deployment Guide](docs/deployment-guide.md)
+## Development Guidelines
 
-## Contributing
+- Follow TypeScript strict mode
+- Use functional React components with hooks
+- Document all functions and components
+- Write tests for all major functionality
+- Follow the established design system
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Environment Configuration
+
+The application uses different environments:
+- Development (dev)
+- Testing (test)
+- Production (prod)
+
+Each environment has its own database and storage configurations.
+
+## Deployment
+
+### Frontend Deployment
+
+1. Build the application:
+   ```bash
+   npm run build
+   ```
+
+2. Deploy to your hosting provider (e.g., Azure Static Web Apps, Vercel)
+
+### Backend Deployment
+
+1. Deploy to Azure Functions:
+   ```bash
+   func azure functionapp publish <app-name>
+   ```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+[MIT License](LICENSE)
 
-## Support
+## Contributors
 
-For support, please open an issue in the GitHub repository or contact the development team.
+- Jouni Leskinen
