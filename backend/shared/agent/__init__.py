@@ -44,6 +44,16 @@ from .connector_agent import (
     ConnectionConfig,
     ConnectorResult,
 )
+from .rest_api_connector import (
+    RestAPIConnector,
+    APIAuthType,
+    APIMethod,
+)
+from .oauth2_connector import (
+    OAuth2Connector,
+    OAuth2FlowType,
+    OAuth2TokenType,
+)
 
 # Session management
 from .session_manager import (
@@ -86,6 +96,12 @@ __all__ = [
     'ConnectionStatus',
     'ConnectionConfig',
     'ConnectorResult',
+    'RestAPIConnector',
+    'APIAuthType',
+    'APIMethod',
+    'OAuth2Connector',
+    'OAuth2FlowType', 
+    'OAuth2TokenType',
     
     # Session management
     'SessionStorageInterface',
