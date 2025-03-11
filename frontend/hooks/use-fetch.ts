@@ -1,130 +1,206 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiRequest } from '@/lib/api';
-import { useToast } from '@/components/ui/use-toast';
+import api, { ApiError, RequestConfig } from '@/lib/api-client';
+import { handleError } from '@/lib/error-handler';
+import API_ENDPOINTS from '@/lib/api-config';
 
-/**
- * Options for the useFetch hook
- */
 export interface UseFetchOptions<T> {
-  /**
-   * Initial data to use before fetch completes
-   */
   initialData?: T;
-  
-  /**
-   * Whether to fetch data immediately on mount
-   * @default true
-   */
   fetchOnMount?: boolean;
-  
-  /**
-   * Dependencies array to trigger refetch when changed
-   */
-  deps?: any[];
-  
-  /**
-   * Custom error handler
-   */
-  onError?: (error: any) => void;
-  
-  /**
-   * Custom success handler
-   */
+  dependencies?: any[];
   onSuccess?: (data: T) => void;
-  
-  /**
-   * Whether to show toast messages on error
-   * @default true
-   */
-  showErrorToast?: boolean;
+  onError?: (error: ApiError) => void;
+  shouldCache?: boolean;
+  cacheKey?: string;
+  cacheTTL?: number; // Time to live in seconds
 }
 
+// Simple in-memory cache
+interface CacheItem<T> {
+  data: T;
+  timestamp: number;
+  ttl: number; // Time to live in milliseconds
+}
+
+const cache = new Map<string, CacheItem<any>>();
+
 /**
- * Custom hook for fetching data from the API
+ * A custom hook for data fetching that handles loading, error states, and caching
  * 
- * @template T The type of data being fetched
+ * @param method HTTP method (get, post, put, patch, delete)
+ * @param url API endpoint URL
+ * @param defaultParams Default parameters to send with the request
+ * @param options Configuration options
+ * @returns Object containing data, loading state, error, and fetch function
  */
-export function useFetch<T = any>(
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+export function useFetch<T = any, P = any>(
+  method: 'get' | 'post' | 'put' | 'patch' | 'delete',
   url: string,
+  defaultParams?: P,
   options: UseFetchOptions<T> = {}
 ) {
+  // Extract options with defaults
   const {
     initialData,
     fetchOnMount = true,
-    deps = [],
-    onError,
+    dependencies = [],
     onSuccess,
-    showErrorToast = true,
+    onError,
+    shouldCache = method === 'get',
+    cacheKey = url,
+    cacheTTL = 60, // Default: 1 minute
   } = options;
-  
-  const { toast } = useToast();
+
+  // State for data, loading, and error
   const [data, setData] = useState<T | undefined>(initialData);
-  const [isLoading, setIsLoading] = useState<boolean>(fetchOnMount);
-  const [error, setError] = useState<any>(null);
-  
-  // Fetch function that can be called manually
-  const fetchData = useCallback(async (requestData?: any) => {
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  // Check if there's a valid cached item
+  const getCachedItem = useCallback(() => {
+    if (!shouldCache || !cacheKey) return null;
+    
+    const cachedItem = cache.get(cacheKey);
+    if (!cachedItem) return null;
+    
+    // Check if cache is still valid
+    const now = Date.now();
+    if (now - cachedItem.timestamp > cachedItem.ttl) {
+      // Cache expired, remove it
+      cache.delete(cacheKey);
+      return null;
+    }
+    
+    return cachedItem.data as T;
+  }, [shouldCache, cacheKey]);
+
+  // Cache data with TTL
+  const cacheData = useCallback((data: T) => {
+    if (shouldCache && cacheKey) {
+      cache.set(cacheKey, {
+        data,
+        timestamp: Date.now(),
+        ttl: cacheTTL * 1000, // Convert to milliseconds
+      });
+    }
+  }, [shouldCache, cacheKey, cacheTTL]);
+
+  // The main fetch function
+  const fetchData = useCallback(async (params?: P, config?: RequestConfig): Promise<T | undefined> => {
+    // Check cache first (for GET requests)
+    if (method === 'get' && !params) {
+      const cachedData = getCachedItem();
+      if (cachedData) {
+        setData(cachedData);
+        return cachedData;
+      }
+    }
+    
     setIsLoading(true);
     setError(null);
     
     try {
-      const result = await apiRequest<T>(method, url, requestData);
+      // Use our API client to make the request
+      const mergedParams = { ...defaultParams, ...params } as P;
+      
+      // Find the endpoint config if possible
+      let endpoint = Object.values(API_ENDPOINTS)
+        .flatMap(domain => Object.values(domain))
+        .find(endpoint => {
+          if (typeof endpoint === 'function') return false;
+          return endpoint.path === url;
+        });
+      
+      // If endpoint was not found directly, look for dynamic endpoints
+      if (!endpoint) {
+        // This is a simplification; in a real app you might need more sophisticated matching
+        endpoint = Object.values(API_ENDPOINTS)
+          .flatMap(domain => Object.values(domain))
+          .find(ep => {
+            if (typeof ep === 'function') {
+              // Try calling with a placeholder to see if it matches
+              const dynamicEndpoint = ep('id');
+              return dynamicEndpoint.path.replace('/id', '') === url.replace(/\/[^/]+$/, '');
+            }
+            return false;
+          });
+      }
+      
+      // Apply endpoint configuration if available
+      const endpointConfig = endpoint && typeof endpoint !== 'function' ? {
+        retry: endpoint.retry?.maxAttempts !== undefined,
+        retryCount: endpoint.retry?.maxAttempts,
+        retryDelay: endpoint.retry?.baseDelay,
+      } : {};
+      
+      // Make the API request
+      const response = await api[method]<T>(url, method === 'get' ? mergedParams : undefined, {
+        ...(method !== 'get' ? { data: mergedParams } : {}),
+        ...endpointConfig,
+        ...config,
+      });
+      
+      const result = response.data;
+      
+      // Update state with the result
       setData(result);
       
+      // Cache the result if it's a GET request
+      if (method === 'get') {
+        cacheData(result);
+      }
+      
+      // Call onSuccess callback if provided
       if (onSuccess) {
         onSuccess(result);
       }
       
       return result;
-    } catch (err: any) {
-      setError(err);
+    } catch (err) {
+      // Format and handle the error
+      const apiError = err as ApiError;
+      setError(apiError);
       
+      // Call onError callback if provided
       if (onError) {
-        onError(err);
+        onError(apiError);
+      } else {
+        // Use the global error handler by default
+        handleError(apiError, { method, url, params });
       }
       
-      if (showErrorToast) {
-        toast({
-          title: 'Error fetching data',
-          description: err.message || 'An unexpected error occurred',
-          variant: 'destructive',
-        });
-      }
-      
-      throw err;
+      return undefined;
     } finally {
       setIsLoading(false);
     }
-  }, [method, url, onSuccess, onError, showErrorToast, toast]);
-  
-  // Fetch data when dependencies change
+  }, [method, url, defaultParams, onSuccess, onError, cacheData, getCachedItem]);
+
+  // Fetch data on mount and when dependencies change
   useEffect(() => {
     if (fetchOnMount) {
       fetchData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchOnMount, ...deps]);
+  }, [fetchOnMount, ...dependencies]);
+
+  // Clear cache for this endpoint
+  const invalidateCache = useCallback(() => {
+    if (cacheKey) {
+      cache.delete(cacheKey);
+    }
+  }, [cacheKey]);
   
-  // Function to manually reset the state
-  const reset = useCallback(() => {
-    setData(initialData);
-    setIsLoading(false);
-    setError(null);
-  }, [initialData]);
-  
-  // Function to manually update the data
-  const updateData = useCallback((newData: T) => {
-    setData(newData);
+  // Clear all cached data
+  const clearAllCache = useCallback(() => {
+    cache.clear();
   }, []);
-  
+
   return {
     data,
     isLoading,
     error,
-    fetchData,
-    reset,
-    updateData,
+    fetch: fetchData,
+    invalidateCache,
+    clearAllCache,
   };
 }
 
