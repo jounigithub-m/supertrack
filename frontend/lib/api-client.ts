@@ -1,232 +1,218 @@
-import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { getSession, signOut } from 'next-auth/react';
+'use client';
 
-// API response types
-export interface ApiResponse<T> {
-  data: T;
-  status: number;
-  statusText: string;
-  headers: Record<string, string>;
-}
+import { API_ENDPOINTS } from './api-config';
+import { getAccessToken } from './auth-utils';
+import offlineService from '@/services/offline-service';
 
-export interface ApiError {
-  message: string;
-  code?: string;
-  status?: number;
-  errors?: Record<string, string[]>;
-  originalError?: unknown;
-}
+export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
 
-// Request configuration with retry options
-export interface RequestConfig extends AxiosRequestConfig {
-  retry?: boolean;
-  retryCount?: number;
-  retryDelay?: number;
-  skipAuthRefresh?: boolean;
-}
-
-// Constants
-const MAX_RETRY_COUNT = 3;
-const RETRY_DELAY_MS = 1000;
-const AUTH_ERROR_CODES = [401, 403];
-
-/**
- * Create and configure the API client with interceptors for authentication,
- * error handling, and request retries.
- */
-export function createApiClient(): AxiosInstance {
-  // Create axios instance with default config
-  const apiClient = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL || '/api',
-    timeout: 30000,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  // Request interceptor for authentication
-  apiClient.interceptors.request.use(
-    async (config) => {
-      // Clone the config to avoid mutating the original
-      const newConfig = { ...config };
-
-      // Skip auth for login/register endpoints or if skipAuthRefresh is true
-      if (
-        newConfig.url?.includes('auth/signin') ||
-        newConfig.url?.includes('auth/signup') ||
-        newConfig.skipAuthRefresh
-      ) {
-        return newConfig;
-      }
-
-      try {
-        // Get the session for auth token
-        const session = await getSession();
-        
-        if (session?.accessToken) {
-          // Set the auth header with token
-          newConfig.headers = newConfig.headers || {};
-          newConfig.headers.Authorization = `Bearer ${session.accessToken}`;
-        }
-      } catch (error) {
-        console.error('Error getting auth token:', error);
-      }
-
-      return newConfig;
-    },
-    (error) => Promise.reject(error)
-  );
-
-  // Response interceptor for error handling
-  apiClient.interceptors.response.use(
-    (response) => response,
-    async (error: AxiosError) => {
-      const originalRequest = error.config as RequestConfig;
-      
-      // Handle authentication errors
-      if (
-        error.response &&
-        AUTH_ERROR_CODES.includes(error.response.status) &&
-        !originalRequest.skipAuthRefresh
-      ) {
-        try {
-          // If it's an auth error, try to sign out
-          // A real implementation might try to refresh the token instead
-          await signOut({ redirect: false });
-          
-          // Redirect to login page
-          window.location.href = '/signin';
-          
-          return Promise.reject(formatApiError(error));
-        } catch (refreshError) {
-          return Promise.reject(formatApiError(refreshError));
-        }
-      }
-
-      // Handle retry logic
-      if (
-        originalRequest &&
-        originalRequest.retry !== false &&
-        (!error.response || error.response.status >= 500) &&
-        (originalRequest.retryCount || 0) < (originalRequest.retryCount || MAX_RETRY_COUNT)
-      ) {
-        originalRequest.retryCount = (originalRequest.retryCount || 0) + 1;
-        
-        // Wait before retrying
-        const delay = originalRequest.retryDelay || RETRY_DELAY_MS;
-        await new Promise((resolve) => setTimeout(resolve, delay * originalRequest.retryCount!));
-        
-        // Retry the request
-        return apiClient(originalRequest);
-      }
-
-      // Format error before rejecting
-      return Promise.reject(formatApiError(error));
-    }
-  );
-
-  return apiClient;
-}
-
-/**
- * Format API errors into a consistent structure
- */
-export function formatApiError(error: unknown): ApiError {
-  if (axios.isAxiosError(error)) {
-    const response = error.response;
-    
-    // Try to extract API error information from response
-    if (response?.data) {
-      const apiError = response.data as any;
-      
-      return {
-        message: apiError.message || apiError.error || 'An error occurred',
-        code: apiError.code || `HTTP_${response.status}`,
-        status: response.status,
-        errors: apiError.errors || undefined,
-        originalError: error,
-      };
-    }
-    
-    // Handle network errors
-    if (error.request && !response) {
-      return {
-        message: 'Network error. Please check your connection and try again.',
-        code: 'NETWORK_ERROR',
-        originalError: error,
-      };
-    }
-    
-    // Generic axios error
-    return {
-      message: error.message || 'An error occurred',
-      code: 'AXIOS_ERROR',
-      originalError: error,
-    };
-  }
-  
-  // Handle non-axios errors
-  if (error instanceof Error) {
-    return {
-      message: error.message || 'An unknown error occurred',
-      code: 'UNKNOWN_ERROR',
-      originalError: error,
-    };
-  }
-  
-  // Fallback for truly unknown errors
-  return {
-    message: 'An unknown error occurred',
-    code: 'UNKNOWN_ERROR',
-    originalError: error,
+export interface RequestOptions {
+  method?: HttpMethod;
+  headers?: Record<string, string>;
+  body?: any;
+  cache?: RequestCache;
+  next?: NextFetchRequestConfig;
+  queryParams?: Record<string, string>;
+  retry?: number;
+  offlineOptions?: {
+    enabled: boolean;
+    priority?: number;
+    expiration?: number; // in milliseconds
+    uniqueId?: string;
   };
 }
 
-// Create singleton instance
-const apiClient = createApiClient();
-
-/**
- * Make an API request with error handling and type safety
- */
-export async function apiRequest<T = any>(
-  method: string,
-  url: string,
-  data?: any,
-  config?: RequestConfig
-): Promise<ApiResponse<T>> {
-  try {
-    const response = await apiClient({
-      method,
-      url,
-      data: method !== 'get' ? data : undefined,
-      params: method === 'get' ? data : undefined,
-      ...config,
-    });
-    
-    return {
-      data: response.data,
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers as Record<string, string>,
-    };
-  } catch (error) {
-    // The error is already formatted by the interceptor
-    throw error;
-  }
+interface NextFetchRequestConfig {
+  revalidate?: number | false;
+  tags?: string[];
 }
 
-// Convenient method wrappers
-export const api = {
-  get: <T = any>(url: string, params?: any, config?: RequestConfig) => 
-    apiRequest<T>('get', url, params, config),
-  post: <T = any>(url: string, data?: any, config?: RequestConfig) => 
-    apiRequest<T>('post', url, data, config),
-  put: <T = any>(url: string, data?: any, config?: RequestConfig) => 
-    apiRequest<T>('put', url, data, config),
-  patch: <T = any>(url: string, data?: any, config?: RequestConfig) => 
-    apiRequest<T>('patch', url, data, config),
-  delete: <T = any>(url: string, config?: RequestConfig) => 
-    apiRequest<T>('delete', url, config),
-};
+/**
+ * Make an API request to the specified endpoint
+ */
+export async function apiRequest<T = any>(
+  endpoint: string,
+  options: RequestOptions = {}
+): Promise<T> {
+  const {
+    method = 'get',
+    headers = {},
+    body,
+    cache,
+    next,
+    queryParams = {},
+    retry = 2,
+    offlineOptions = { enabled: true }
+  } = options;
 
-export default api;
+  // Check if we're offline and should queue this request
+  if (
+    offlineOptions.enabled && 
+    offlineService && 
+    typeof window !== 'undefined' && 
+    !navigator.onLine && 
+    method !== 'get'
+  ) {
+    // Queue this operation for when we're back online
+    await offlineService.queueOperation({
+      id: offlineOptions.uniqueId || `${method}-${endpoint}-${Date.now()}`,
+      method,
+      path: endpoint,
+      body,
+      headers,
+      priority: offlineOptions.priority || 1,
+      timestamp: Date.now(),
+      expiration: offlineOptions.expiration || Date.now() + 7 * 24 * 60 * 60 * 1000, // Default 7 days
+    });
+    
+    // For methods that modify data, we need to return a placeholder response
+    // This allows the UI to continue as if the operation succeeded
+    // The actual sync will happen when back online
+    if (method !== 'get') {
+      // Return a mock success response
+      // The ID will be temporary until sync
+      return {
+        success: true,
+        id: `offline-${Date.now()}`,
+        _isOfflinePlaceholder: true
+      } as unknown as T;
+    }
+  }
+
+  // Determine if this endpoint requires authentication
+  const endpointConfig = API_ENDPOINTS[endpoint];
+  const requiresAuth = endpointConfig?.requiresAuth ?? true;
+
+  // Build URL with query parameters
+  const url = new URL(
+    `${process.env.NEXT_PUBLIC_API_BASE_URL || ''}${endpoint}`,
+    typeof window !== 'undefined' ? window.location.origin : undefined
+  );
+  
+  // Add query parameters
+  Object.entries(queryParams).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      url.searchParams.append(key, value);
+    }
+  });
+
+  // Set headers
+  const requestHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...headers,
+  };
+
+  // Add auth token if required
+  if (requiresAuth) {
+    const token = await getAccessToken();
+    if (token) {
+      requestHeaders['Authorization'] = `Bearer ${token}`;
+    }
+  }
+
+  // Prepare request options
+  const requestOptions: RequestInit = {
+    method: method.toUpperCase(),
+    headers: requestHeaders,
+    cache,
+    next,
+  };
+
+  // Add body for non-GET requests
+  if (method !== 'get' && body !== undefined) {
+    requestOptions.body = JSON.stringify(body);
+  }
+
+  let retryCount = 0;
+  let error: Error | null = null;
+
+  // Try request with retries
+  while (retryCount <= retry) {
+    try {
+      // Check if we can use a cached response for GET requests when offline
+      if (
+        method === 'get' &&
+        offlineOptions.enabled &&
+        offlineService && 
+        typeof window !== 'undefined' && 
+        !navigator.onLine
+      ) {
+        const cachedResponse = await offlineService.getOfflineData(endpoint, queryParams);
+        if (cachedResponse) {
+          return cachedResponse as T;
+        }
+      }
+      
+      const response = await fetch(url.toString(), requestOptions);
+      
+      // Handle batch endpoint responses
+      if (endpoint === '/api/v1/batch') {
+        const responseData = await response.json();
+        // For batch requests, we always return the full response
+        // The caller is responsible for handling individual operation results
+        return responseData as T;
+      }
+      
+      // Handle non-batch responses
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          JSON.stringify({
+            status: response.status,
+            statusText: response.statusText,
+            ...errorData,
+          })
+        );
+      }
+
+      const data = await response.json() as T;
+      
+      // Cache GET responses for offline use
+      if (method === 'get' && offlineOptions.enabled && offlineService) {
+        await offlineService.cacheResponse(endpoint, queryParams, data);
+      }
+      
+      return data;
+    } catch (err) {
+      error = err instanceof Error ? err : new Error(String(err));
+      retryCount++;
+      
+      if (retryCount <= retry) {
+        // Exponential backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount - 1)));
+      }
+    }
+  }
+
+  throw error;
+}
+
+/**
+ * Batch multiple API requests into a single HTTP request
+ */
+export async function batchRequests<T = any[]>(
+  operations: Array<{
+    id: string;
+    method: HttpMethod;
+    path: string;
+    body?: any;
+  }>,
+  options: RequestOptions = {}
+): Promise<Array<{
+  id: string;
+  status: number;
+  statusText: string;
+  data?: any;
+  error?: string;
+}>> {
+  return apiRequest<any>('/api/v1/batch', {
+    method: 'post',
+    body: { operations },
+    ...options,
+  });
+}
+
+export default {
+  request: apiRequest,
+  batch: batchRequests,
+};
