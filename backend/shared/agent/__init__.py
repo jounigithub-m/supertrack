@@ -22,6 +22,13 @@ from .openai_model import OpenAIModel, OpenAIModelError
 
 # Agent implementations
 from .query_agent import QueryAgent
+from .extraction_agent import (
+    MetadataExtractionAgent,
+    ExtractionField,
+    ExtractionSchema,
+    DocumentType,
+    DocumentProcessor,
+)
 
 # Session management
 from .session_manager import (
@@ -48,6 +55,11 @@ __all__ = [
     
     # Agent implementations
     'QueryAgent',
+    'MetadataExtractionAgent',
+    'ExtractionField',
+    'ExtractionSchema',
+    'DocumentType',
+    'DocumentProcessor',
     
     # Session management
     'SessionStorageInterface',
