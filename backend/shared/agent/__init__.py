@@ -29,6 +29,14 @@ from .extraction_agent import (
     DocumentType,
     DocumentProcessor,
 )
+from .orchestrator_agent import (
+    OrchestratorAgent,
+    Task,
+    TaskStatus,
+    Workflow,
+    WorkflowStatus,
+    WorkflowEngine,
+)
 
 # Session management
 from .session_manager import (
@@ -60,6 +68,12 @@ __all__ = [
     'ExtractionSchema',
     'DocumentType',
     'DocumentProcessor',
+    'OrchestratorAgent',
+    'Task',
+    'TaskStatus',
+    'Workflow',
+    'WorkflowStatus',
+    'WorkflowEngine',
     
     # Session management
     'SessionStorageInterface',
