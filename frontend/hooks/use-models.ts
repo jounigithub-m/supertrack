@@ -1,9 +1,9 @@
-import { useFetch } from './use-fetch';
 import { useState, useCallback } from 'react';
-import { apiEndpoints } from '@/lib/api';
-import { useToast } from '@/components/ui/use-toast';
+import useFetch from './use-fetch';
+import API_ENDPOINTS from '@/lib/api-config';
+import { handleError } from '@/lib/error-handler';
 
-// Define model types
+// Type definitions
 export type ModelType = 'classification' | 'regression' | 'nlp' | 'computer-vision' | 'time-series';
 export type ModelStatus = 'active' | 'training' | 'inactive' | 'error';
 
@@ -13,14 +13,20 @@ export interface AIModel {
   type: ModelType;
   framework: string;
   version: string;
+  description?: string;
   accuracy: number;
   status: ModelStatus;
   lastTrained: string;
   createdBy: string;
-  description?: string;
-  dataSources?: string[];
-  createdAt?: string;
-  updatedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  dataSourceIds?: string[];
+  metrics?: {
+    accuracy: number;
+    precision: number;
+    recall: number;
+    f1Score: number;
+  };
 }
 
 export interface CreateModelInput {
@@ -28,376 +34,363 @@ export interface CreateModelInput {
   type: ModelType;
   framework: string;
   version: string;
-  dataSourceIds: string[];
   description?: string;
+  dataSourceIds?: string[];
 }
 
-export interface UpdateModelInput extends Partial<CreateModelInput> {
-  id: string;
+export interface UpdateModelInput {
+  name?: string;
+  type?: ModelType;
+  framework?: string;
+  version?: string;
+  description?: string;
   status?: ModelStatus;
+  dataSourceIds?: string[];
 }
 
-// Mock data for fallback or development
-const mockModels: AIModel[] = [
+// Mock data for development and testing
+// This will be used until the API is fully implemented
+const MOCK_MODELS: AIModel[] = [
   {
-    id: '1',
+    id: 'model-001',
     name: 'Customer Churn Predictor',
     type: 'classification',
-    framework: 'PyTorch',
-    version: '2.1',
-    accuracy: 0.91,
-    status: 'active',
-    lastTrained: '2025-03-08',
-    createdBy: 'Sarah Chen'
-  },
-  {
-    id: '2',
-    name: 'Document Classifier',
-    type: 'nlp',
-    framework: 'Hugging Face',
-    version: '1.0',
-    accuracy: 0.86,
-    status: 'active',
-    lastTrained: '2025-03-05',
-    createdBy: 'David Johnson'
-  },
-  {
-    id: '3',
-    name: 'Product Demand Forecast',
-    type: 'time-series',
     framework: 'TensorFlow',
-    version: '3.2',
-    accuracy: 0.79,
-    status: 'training',
-    lastTrained: '2025-03-10',
-    createdBy: 'Maria Garcia'
-  },
-  {
-    id: '4',
-    name: 'Image Recognition System',
-    type: 'computer-vision',
-    framework: 'PyTorch',
-    version: '1.5',
-    accuracy: 0.94,
+    version: '2.5',
+    description: 'Predicts customer churn based on historical behavior and demographics',
+    accuracy: 0.89,
     status: 'active',
-    lastTrained: '2025-03-01',
-    createdBy: 'Alex Wong'
+    lastTrained: '2024-01-15T08:30:00Z',
+    createdBy: 'user-001',
+    createdAt: '2023-12-10T14:22:33Z',
+    updatedAt: '2024-01-15T08:30:00Z',
+    dataSourceIds: ['ds-001', 'ds-003'],
+    metrics: {
+      accuracy: 0.89,
+      precision: 0.82,
+      recall: 0.91,
+      f1Score: 0.86
+    }
   },
   {
-    id: '5',
-    name: 'Price Optimizer',
+    id: 'model-002',
+    name: 'Sales Forecasting',
     type: 'regression',
-    framework: 'Scikit-learn',
-    version: '2.0',
-    accuracy: 0.82,
-    status: 'inactive',
-    lastTrained: '2025-02-20',
-    createdBy: 'Emily Taylor'
+    framework: 'PyTorch',
+    version: '1.10',
+    description: 'Predicts future sales based on historical data and seasonal patterns',
+    accuracy: 0.92,
+    status: 'active',
+    lastTrained: '2024-02-01T10:15:22Z',
+    createdBy: 'user-002',
+    createdAt: '2023-11-05T09:12:45Z',
+    updatedAt: '2024-02-01T10:15:22Z',
+    dataSourceIds: ['ds-002'],
+    metrics: {
+      accuracy: 0.92,
+      precision: 0.88,
+      recall: 0.90,
+      f1Score: 0.89
+    }
   },
   {
-    id: '6',
+    id: 'model-003',
     name: 'Sentiment Analyzer',
     type: 'nlp',
     framework: 'BERT',
-    version: '1.2',
-    accuracy: 0.88,
+    version: '1.0',
+    description: 'Analyzes sentiment in customer feedback and social media mentions',
+    accuracy: 0.78,
+    status: 'training',
+    lastTrained: '2024-02-28T13:45:10Z',
+    createdBy: 'user-001',
+    createdAt: '2024-01-20T11:33:21Z',
+    updatedAt: '2024-02-28T13:45:10Z',
+    dataSourceIds: ['ds-004'],
+    metrics: {
+      accuracy: 0.78,
+      precision: 0.75,
+      recall: 0.79,
+      f1Score: 0.77
+    }
+  },
+  {
+    id: 'model-004',
+    name: 'Fraud Detection System',
+    type: 'classification',
+    framework: 'TensorFlow',
+    version: '2.6',
+    description: 'Identifies potentially fraudulent transactions in real-time',
+    accuracy: 0.96,
+    status: 'active',
+    lastTrained: '2024-02-10T09:20:15Z',
+    createdBy: 'user-003',
+    createdAt: '2023-10-12T16:44:30Z',
+    updatedAt: '2024-02-10T09:20:15Z',
+    dataSourceIds: ['ds-001', 'ds-005'],
+    metrics: {
+      accuracy: 0.96,
+      precision: 0.94,
+      recall: 0.92,
+      f1Score: 0.93
+    }
+  },
+  {
+    id: 'model-005',
+    name: 'Object Recognition',
+    type: 'computer-vision',
+    framework: 'PyTorch',
+    version: '1.11',
+    description: 'Detects and classifies objects in images and video streams',
+    accuracy: 0.85,
+    status: 'inactive',
+    lastTrained: '2023-12-05T14:22:33Z',
+    createdBy: 'user-002',
+    createdAt: '2023-09-18T08:55:42Z',
+    updatedAt: '2023-12-05T14:22:33Z',
+    dataSourceIds: ['ds-006'],
+    metrics: {
+      accuracy: 0.85,
+      precision: 0.83,
+      recall: 0.81,
+      f1Score: 0.82
+    }
+  },
+  {
+    id: 'model-006',
+    name: 'Supply Chain Forecaster',
+    type: 'time-series',
+    framework: 'Scikit-learn',
+    version: '1.0',
+    description: 'Predicts inventory requirements based on historical sales and seasonal patterns',
+    accuracy: 0.82,
     status: 'error',
-    lastTrained: '2025-03-09',
-    createdBy: 'James Wilson'
+    lastTrained: '2024-02-20T11:10:05Z',
+    createdBy: 'user-001',
+    createdAt: '2023-11-30T10:40:15Z',
+    updatedAt: '2024-02-20T11:10:05Z',
+    dataSourceIds: ['ds-002', 'ds-007'],
+    metrics: {
+      accuracy: 0.82,
+      precision: 0.79,
+      recall: 0.81,
+      f1Score: 0.80
+    }
   }
 ];
 
+// Feature flag to control whether to use real or mock data
+const USE_MOCK_DATA = !process.env.NEXT_PUBLIC_API_URL;
+
 /**
- * Custom hook for managing AI models data
- * 
- * @param options Options to customize the behavior
+ * Hook for managing AI models
  */
-export function useModels(options: {
-  /**
-   * Whether to use mock data instead of API calls
-   * @default false in production, true in development
-   */
-  useMockData?: boolean;
-  
-  /**
-   * Whether to fetch data on mount
-   * @default true
-   */
-  fetchOnMount?: boolean;
-} = {}) {
-  const { 
-    useMockData = process.env.NODE_ENV === 'development', 
-    fetchOnMount = true 
-  } = options;
-  
-  const { toast } = useToast();
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
-  
-  // Use the fetch hook for getting all models
+export const useModels = () => {
+  // State for the selected model
+  const [selectedModel, setSelectedModel] = useState<AIModel | null>(null);
+
+  // Use our fetch hook for API requests
   const {
-    data: models,
+    data: models = USE_MOCK_DATA ? MOCK_MODELS : [],
     isLoading: isLoadingModels,
     error: modelsError,
-    fetchData: fetchModels,
-    updateData: updateModels,
-  } = useFetch<AIModel[]>('GET', '/models', {
-    initialData: useMockData ? mockModels : undefined,
-    fetchOnMount: !useMockData && fetchOnMount,
-  });
-  
-  // Get a single model by ID
-  const {
-    data: selectedModel,
-    isLoading: isLoadingSelectedModel,
-    error: selectedModelError,
-    fetchData: fetchSelectedModel,
-  } = useFetch<AIModel>('GET', selectedModelId ? `/models/${selectedModelId}` : '', {
-    fetchOnMount: !useMockData && !!selectedModelId,
-  });
-  
-  // Select a model by ID
-  const selectModel = useCallback((id: string) => {
-    setSelectedModelId(id);
-    
-    if (useMockData) {
-      // If using mock data, find the model in the local array
-      const model = mockModels.find(m => m.id === id);
-      if (model) {
-        return Promise.resolve(model);
-      }
-      return Promise.reject(new Error('Model not found'));
+    fetch: fetchModelsFromApi,
+    invalidateCache,
+  } = useFetch<AIModel[]>(
+    'get',
+    API_ENDPOINTS.MODELS.LIST.path,
+    undefined,
+    {
+      fetchOnMount: !USE_MOCK_DATA,
+      shouldCache: true,
+      cacheTTL: 60, // 1 minute
     }
-    
-    // Otherwise fetch from API
-    return fetchSelectedModel();
-  }, [useMockData, fetchSelectedModel]);
-  
+  );
+
+  // Fetch models
+  const fetchModels = useCallback(async () => {
+    if (USE_MOCK_DATA) {
+      return MOCK_MODELS;
+    }
+    return await fetchModelsFromApi();
+  }, [fetchModelsFromApi]);
+
+  // Fetch a specific model
+  const fetchModel = useCallback(async (id: string) => {
+    if (USE_MOCK_DATA) {
+      const model = MOCK_MODELS.find(m => m.id === id) || null;
+      setSelectedModel(model);
+      return model;
+    }
+
+    try {
+      const endpoint = API_ENDPOINTS.MODELS.GET(id);
+      const { data: fetchedModel } = await fetch(endpoint.path);
+      setSelectedModel(fetchedModel || null);
+      return fetchedModel;
+    } catch (error) {
+      handleError(error, { context: 'fetchModel', modelId: id });
+      return null;
+    }
+  }, []);
+
   // Create a new model
   const createModel = useCallback(async (input: CreateModelInput) => {
-    if (useMockData) {
-      // Create a new mock model
+    if (USE_MOCK_DATA) {
+      // Generate a mock model from the input
+      const newId = `model-${Math.floor(Math.random() * 1000)}`;
       const newModel: AIModel = {
-        id: `mock-${Date.now()}`,
+        id: newId,
         name: input.name,
         type: input.type,
         framework: input.framework,
         version: input.version,
-        accuracy: 0.75, // Default value for new models
-        status: 'training', // New models start in training
-        lastTrained: new Date().toISOString().split('T')[0],
-        createdBy: 'Current User',
         description: input.description,
-        dataSources: input.dataSourceIds,
+        accuracy: 0,
+        status: 'inactive',
+        lastTrained: new Date().toISOString(),
+        createdBy: 'current-user',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        dataSourceIds: input.dataSourceIds,
+        metrics: {
+          accuracy: 0,
+          precision: 0,
+          recall: 0,
+          f1Score: 0
+        }
       };
       
-      // Add to mock data
-      const updatedModels = [...(models || []), newModel];
-      updateModels(updatedModels);
-      
-      toast({
-        title: 'Model created',
-        description: `${newModel.name} has been created successfully.`,
-      });
-      
+      // In a real app, we would push this to the server
+      // For mock purposes, we'll just return the new model
+      invalidateCache(); // Invalidate the models cache
       return newModel;
     }
-    
-    // Otherwise use the API
+
     try {
-      const result = await apiEndpoints.createModel(input);
-      // Refresh the models list
-      fetchModels();
-      
-      toast({
-        title: 'Model created',
-        description: `${result.name} has been created successfully.`,
+      const { data } = await fetch(API_ENDPOINTS.MODELS.CREATE.path, {
+        method: 'post',
+        body: JSON.stringify(input),
       });
       
-      return result;
-    } catch (error: any) {
-      toast({
-        title: 'Failed to create model',
-        description: error.message || 'An unexpected error occurred',
-        variant: 'destructive',
-      });
+      // Invalidate the models cache to refresh the list
+      invalidateCache();
+      
+      return data;
+    } catch (error) {
+      handleError(error, { context: 'createModel', input });
       throw error;
     }
-  }, [useMockData, models, updateModels, fetchModels, toast]);
-  
+  }, [invalidateCache]);
+
   // Update an existing model
-  const updateModel = useCallback(async (input: UpdateModelInput) => {
-    if (useMockData) {
-      // Update the mock model
-      const updatedModels = (models || []).map(model => {
-        if (model.id === input.id) {
-          return { ...model, ...input, updatedAt: new Date().toISOString() };
-        }
-        return model;
-      });
-      
-      updateModels(updatedModels);
-      
-      toast({
-        title: 'Model updated',
-        description: `The model has been updated successfully.`,
-      });
-      
-      return updatedModels.find(m => m.id === input.id);
+  const updateModel = useCallback(async (id: string, input: UpdateModelInput) => {
+    if (USE_MOCK_DATA) {
+      // For mock purposes, return a success status
+      invalidateCache(); // Invalidate the models cache
+      return { success: true };
     }
-    
-    // Otherwise use the API
+
     try {
-      const result = await apiEndpoints.updateModel(input.id, input);
-      // Refresh the models list
-      fetchModels();
+      const endpoint = API_ENDPOINTS.MODELS.UPDATE(id);
+      const { data } = await fetch(endpoint.path, {
+        method: 'put',
+        body: JSON.stringify(input),
+      });
       
-      // If this is the selected model, refresh it too
-      if (selectedModelId === input.id) {
-        fetchSelectedModel();
+      // Invalidate the models cache to refresh the list
+      invalidateCache();
+      
+      // If this was the selected model, update it
+      if (selectedModel && selectedModel.id === id) {
+        fetchModel(id);
       }
       
-      toast({
-        title: 'Model updated',
-        description: `The model has been updated successfully.`,
-      });
-      
-      return result;
-    } catch (error: any) {
-      toast({
-        title: 'Failed to update model',
-        description: error.message || 'An unexpected error occurred',
-        variant: 'destructive',
-      });
+      return data;
+    } catch (error) {
+      handleError(error, { context: 'updateModel', modelId: id, input });
       throw error;
     }
-  }, [useMockData, models, updateModels, fetchModels, selectedModelId, fetchSelectedModel, toast]);
-  
+  }, [fetchModel, invalidateCache, selectedModel]);
+
   // Delete a model
   const deleteModel = useCallback(async (id: string) => {
-    if (useMockData) {
-      // Delete from mock data
-      const updatedModels = (models || []).filter(model => model.id !== id);
-      updateModels(updatedModels);
-      
-      toast({
-        title: 'Model deleted',
-        description: 'The model has been deleted successfully.',
-      });
-      
-      return true;
+    if (USE_MOCK_DATA) {
+      // For mock purposes, return a success status
+      invalidateCache(); // Invalidate the models cache
+      return { success: true };
     }
-    
-    // Otherwise use the API
+
     try {
-      await apiEndpoints.deleteModel(id);
-      // Refresh the models list
-      fetchModels();
-      
-      toast({
-        title: 'Model deleted',
-        description: 'The model has been deleted successfully.',
+      const endpoint = API_ENDPOINTS.MODELS.DELETE(id);
+      const { data } = await fetch(endpoint.path, {
+        method: 'delete',
       });
       
-      return true;
-    } catch (error: any) {
-      toast({
-        title: 'Failed to delete model',
-        description: error.message || 'An unexpected error occurred',
-        variant: 'destructive',
-      });
+      // Invalidate the models cache to refresh the list
+      invalidateCache();
+      
+      // If this was the selected model, clear it
+      if (selectedModel && selectedModel.id === id) {
+        setSelectedModel(null);
+      }
+      
+      return data;
+    } catch (error) {
+      handleError(error, { context: 'deleteModel', modelId: id });
       throw error;
     }
-  }, [useMockData, models, updateModels, fetchModels, toast]);
-  
+  }, [invalidateCache, selectedModel]);
+
   // Start training a model
   const trainModel = useCallback(async (id: string) => {
-    if (useMockData) {
-      // Update status in mock data
-      const updatedModels = (models || []).map(model => {
-        if (model.id === id) {
-          return { ...model, status: 'training' as ModelStatus, updatedAt: new Date().toISOString() };
-        }
-        return model;
-      });
-      
-      updateModels(updatedModels);
-      
-      toast({
-        title: 'Training started',
-        description: 'The model training has been initiated.',
-      });
-      
-      // Simulate training completion after 3 seconds
-      setTimeout(() => {
-        const completedModels = (updatedModels).map(model => {
-          if (model.id === id) {
-            return { 
-              ...model, 
-              status: 'active' as ModelStatus, 
-              accuracy: Math.min(0.99, model.accuracy + 0.05),
-              lastTrained: new Date().toISOString().split('T')[0],
-              updatedAt: new Date().toISOString()
-            };
-          }
-          return model;
-        });
-        
-        updateModels(completedModels);
-        
-        toast({
-          title: 'Training completed',
-          description: 'The model training has finished successfully.',
-        });
-      }, 3000);
-      
-      return true;
+    if (USE_MOCK_DATA) {
+      // Mock updating the model status
+      const modelIndex = MOCK_MODELS.findIndex(m => m.id === id);
+      if (modelIndex >= 0) {
+        MOCK_MODELS[modelIndex] = {
+          ...MOCK_MODELS[modelIndex],
+          status: 'training',
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      invalidateCache(); // Invalidate the models cache
+      return { success: true };
     }
-    
-    // Otherwise use the API
+
     try {
-      await apiRequest('POST', `/models/${id}/train`);
-      // Refresh the models list
-      fetchModels();
-      
-      toast({
-        title: 'Training started',
-        description: 'The model training has been initiated.',
+      const endpoint = API_ENDPOINTS.MODELS.TRAIN(id);
+      const { data } = await fetch(endpoint.path, {
+        method: 'post',
       });
       
-      return true;
-    } catch (error: any) {
-      toast({
-        title: 'Failed to start training',
-        description: error.message || 'An unexpected error occurred',
-        variant: 'destructive',
-      });
+      // Invalidate the models cache to refresh the list
+      invalidateCache();
+      
+      // If this was the selected model, update it
+      if (selectedModel && selectedModel.id === id) {
+        fetchModel(id);
+      }
+      
+      return data;
+    } catch (error) {
+      handleError(error, { context: 'trainModel', modelId: id });
       throw error;
     }
-  }, [useMockData, models, updateModels, fetchModels, toast]);
-  
+  }, [fetchModel, invalidateCache, selectedModel]);
+
   return {
-    // Data
-    models: models || [],
+    models,
     selectedModel,
-    
-    // Loading states
     isLoadingModels,
-    isLoadingSelectedModel,
-    
-    // Errors
     modelsError,
-    selectedModelError,
-    
-    // Actions
     fetchModels,
-    selectModel,
+    fetchModel,
     createModel,
     updateModel,
     deleteModel,
     trainModel,
   };
-}
+};
 
 export default useModels;
