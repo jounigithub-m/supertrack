@@ -37,6 +37,13 @@ from .orchestrator_agent import (
     WorkflowStatus,
     WorkflowEngine,
 )
+from .connector_agent import (
+    ConnectorAgent,
+    ConnectorType,
+    ConnectionStatus,
+    ConnectionConfig,
+    ConnectorResult,
+)
 
 # Session management
 from .session_manager import (
@@ -74,6 +81,11 @@ __all__ = [
     'Workflow',
     'WorkflowStatus',
     'WorkflowEngine',
+    'ConnectorAgent',
+    'ConnectorType',
+    'ConnectionStatus',
+    'ConnectionConfig',
+    'ConnectorResult',
     
     # Session management
     'SessionStorageInterface',
