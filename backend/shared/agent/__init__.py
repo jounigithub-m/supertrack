@@ -59,6 +59,10 @@ from .meta_connector import (
     MetaAPIVersion,
     MetaProductType,
 )
+from .google_ads_connector import (
+    GoogleAdsConnector,
+    GoogleAdsAPIVersion,
+)
 
 # Session management
 from .session_manager import (
@@ -110,6 +114,8 @@ __all__ = [
     'MetaConnector',
     'MetaAPIVersion',
     'MetaProductType',
+    'GoogleAdsConnector',
+    'GoogleAdsAPIVersion',
     
     # Session management
     'SessionStorageInterface',
